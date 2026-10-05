@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>忘年会 セルフ受付</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+  <style>
+    body { 
+      background-color: #f5f5f5; 
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
+      min-height: 100vh; 
+      padding: 20px 10px; 
+    }
+    .card { 
+      border-radius: 16px; 
+      box-shadow: 0 8px 20px rgba(0,0,0,0.1); 
+      width: 100%; 
+    }
+    .seat-badge { 
+      font-size: 3rem; 
+      font-weight: bold; 
+      color: #e53935; 
+      background: #ffebee; 
+      padding: 15px 30px; 
+      border-radius: 16px; 
+      display: inline-block; 
+    }
+    .status-badge { 
+      font-size: 1rem; 
+      font-weight: bold; 
+    }
+    .name-btn { 
+      width: 100%; 
+      text-align: left; 
+      justify-content: space-between; 
+      height: auto; 
+      padding: 12px 16px; 
+      white-space: normal; 
+    }
+  </style>
+</head>
+<body>
+  <section class="container" style="max-width: 500px;">
+
+    <!-- 1. 名簿選択カード -->
+    <div id="select-card" class="card p-5">
+      <h1 class="title has-text-centered is-4 mb-2">🎉 忘年会 セルフ受付</h1>
+      <p class="has-text-centered has-text-grey is-size-7 mb-4">ご自身のお名前を選択（タップ）してください</p>
+      
+      <!-- 読み込み中表示 -->
+      <div id="loading-msg" class="notification is-info is-light has-text-centered">
+        参加者名簿を読み込んでいます...
+      </div>
+
+      <!-- 名前選択ボタンリスト -->
+      <div id="name-list" class="buttons" style="display: none;"></div>
+    </div>
+
+    <!-- 2. 受付完了＆お席案内カード -->
+    <div id="result-card" class="card has-text-centered p-5" style="display: none;">
+      <p class="is-size-6 has-text-success-dark has-text-weight-bold mb-2">✅ 受付が完了しました！</p>
+      <p id="res-dept" class="is-size-5 mb-1 has-text-grey"></p>
+      <p id="res-name" class="is-size-2 has-text-weight-bold mb-4"></p>
+      
+      <hr style="margin: 1.5rem 0;">
+
+      <p class="is-size-6 has-text-weight-bold mb-2">本日のお席はこちらです</p>
+      <div class="my-3">
+        <span id="res-seat" class="seat-badge"></span>
+      </div>
+
+      <p id="sync-status" class="status-badge has-text-grey mt-4"></p>
+      
+      <div class="mt-5">
+        <button onclick="resetSelection()" class="button is-light is-small">← 名簿選択に戻る</button>
+      </div>
+    </div>
+
+  </section>
+
+  <script>
+    // 連携する Google Apps Script (GAS) のWebアプリURL
+    const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbx2_ivlGUTS31U-yoOIi3_y4kjVrUBjUBbEi0R1neI5pYrZ98it7pl7Q-rZnX06ucvtZQ/exec';
+
+    let cachedParticipants = [];
+
+    // 初期データ読み込みコールバック
+    window.handleDataLoaded = function(data) {
+      if (data && Array.isArray(data)) {
+        cachedParticipants = data;
+        renderNameList();
+      } else if (data && data.status === 'error') {
+        showError("GASエラー: " + data.message);
+      } else {
+        showError("データ形式が不正です。スプレッドシートをご確認ください。");
+      }
+    };
+
+    // 名前リスト（ボタン一覧）の表示
+    function renderNameList() {
+      const loadingMsg = document.getElementById('loading-msg');
+      const nameList = document.getElementById('name-list');
+      
+      loadingMsg.style.display = 'none';
+      nameList.style.display = 'block';
+      nameList.innerHTML = '';
+
+      cachedParticipants.forEach(p => {
+        const btn = document.createElement('button');
+        btn.className = 'button is-white is-outlined name-btn mb-2';
+        btn.style.border = '1px solid #dbdbdb';
+        
+        if (p.isAttended && p.seat) {
+          btn.innerHTML = `<span><strong>${p.name}</strong> <small class="has-text-grey">(${p.department || ''})</small></span><span class="tag is-warning is-light">受付済</span>`;
+        } else {
+          btn.innerHTML = `<span><strong>${p.name}</strong> <small class="has-text-grey">(${p.department || ''})</small></span><span class="tag is-info is-light">未受付</span>`;
+        }
+
+        btn.onclick = () => selectParticipant(p.id);
+        nameList.appendChild(btn);
+      });
+    }
+
+    // 名前タップ時の動作
+    function selectParticipant(id) {
+      const participant = cachedParticipants.find(p => p.id === id);
+      if (!participant) return;
+
+      if (!confirm(`${participant.name} 様で受付を行ってもよろしいですか？`)) {
+        return;
+      }
+
+      document.getElementById('select-card').style.display = 'none';
+      document.getElementById('result-card').style.display = 'block';
+
+      document.getElementById('res-dept').innerText = participant.department || '';
+      document.getElementById('res-name').innerText = (participant.name || '') + " 様";
+      document.getElementById('res-seat').innerText = participant.seat || '割り当て中...';
+
+      const syncStatus = document.getElementById('sync-status');
+
+      if (participant.isAttended && participant.seat) {
+        syncStatus.className = "status-badge has-text-warning-dark";
+        syncStatus.innerText = "⚠️ 既に受付済みです";
+      } else {
+        syncStatus.className = "status-badge has-text-info";
+        syncStatus.innerText = "⏳ お席をランダム割り当て中...";
+        participant.isAttended = true;
+
+        // JSONPによる非同期記録送信
+        const recordScript = document.createElement('script');
+        recordScript.src = `${GAS_API_URL}?action=record&id=${encodeURIComponent(id)}&callback=handleRecordComplete&_=${new Date().getTime()}`;
+        recordScript.onerror = function() {
+          syncStatus.className = "status-badge has-text-danger";
+          syncStatus.innerText = "❌ 通信エラーが発生しました";
+        };
+        document.body.appendChild(recordScript);
+      }
+    }
+
+    // 受付完了＆座席確定のレスポンス処理
+    window.handleRecordComplete = function(res) {
+      const syncStatus = document.getElementById('sync-status');
+      const resSeat = document.getElementById('res-seat');
+      
+      if (res && res.status === 'success') {
+        if (res.seat) {
+          resSeat.innerText = res.seat;
+        }
+
+        if (res.isAlreadyAttended) {
+          syncStatus.className = "status-badge has-text-warning-dark";
+          syncStatus.innerText = "⚠️️ 既に受付済みです";
+        } else {
+          syncStatus.className = "status-badge has-text-success";
+          syncStatus.innerText = "✅ お席が確定しました（案内メール送信済）";
+        }
+      } else {
+        syncStatus.className = "status-badge has-text-danger";
+        syncStatus.innerText = "❌ 記録エラー: " + (res ? res.message : '通信失敗');
+      }
+    };
+
+    function resetSelection() {
+      document.getElementById('result-card').style.display = 'none';
+      document.getElementById('select-card').style.display = 'block';
+      renderNameList();
+    }
+
+    function showError(msg) {
+      const loadingMsg = document.getElementById('loading-msg');
+      loadingMsg.className = "notification is-danger is-light";
+      loadingMsg.innerHTML = msg;
+    }
+
+    // 起動時の初期データ読み込み
+    window.onload = function() {
+      const script = document.createElement('script');
+      script.src = `${GAS_API_URL}?action=getData&callback=handleDataLoaded&_=${new Date().getTime()}`;
+      script.onerror = function() {
+        showError("通信エラーが発生しました。接続状況をご確認ください。");
+      };
+      document.body.appendChild(script);
+    };
+  </script>
+</body>
+</html>
