@@ -43,18 +43,40 @@
 <body>
   <section class="container" style="max-width: 500px;">
 
-    <!-- 1. 名簿選択カード -->
+    <!-- 1. 部署・名前選択カード -->
     <div id="select-card" class="card p-5">
       <h1 class="title has-text-centered is-4 mb-2">🎉 忘年会 セルフ受付</h1>
-      <p class="has-text-centered has-text-grey is-size-7 mb-4">ご自身のお名前を選択（タップ）してください</p>
+      <p class="has-text-centered has-text-grey is-size-7 mb-4">部署を選択後、お名前をタップしてください</p>
       
       <!-- 読み込み中表示 -->
       <div id="loading-msg" class="notification is-info is-light has-text-centered">
         参加者名簿を読み込んでいます...
       </div>
 
-      <!-- 名前選択ボタンリスト -->
-      <div id="name-list" class="buttons" style="display: none;"></div>
+      <!-- メイン選択エリア -->
+      <div id="selection-area" style="display: none;">
+        <!-- 部署選択プルダウン -->
+        <div class="field mb-4">
+          <label class="label is-small">① 部署を選択</label>
+          <div class="control">
+            <div class="select is-fullwidth">
+              <select id="dept-select" onchange="filterNamesByDepartment()">
+                <!-- JSで動的にオプション生成 -->
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <hr style="margin: 1rem 0;">
+
+        <!-- 名前選択ボタンリスト -->
+        <div class="field">
+          <label class="label is-small">② お名前を選択</label>
+          <div id="name-list" class="buttons">
+            <!-- JSで動的にボタン生成 -->
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 2. 受付完了＆お席案内カード -->
@@ -73,7 +95,7 @@
       <p id="sync-status" class="status-badge has-text-grey mt-4"></p>
       
       <div class="mt-5">
-        <button onclick="resetSelection()" class="button is-light is-small">← 名簿選択に戻る</button>
+        <button onclick="resetSelection()" class="button is-light is-small">← 選択画面に戻る</button>
       </div>
     </div>
 
@@ -89,7 +111,7 @@
     window.handleDataLoaded = function(data) {
       if (data && Array.isArray(data)) {
         cachedParticipants = data;
-        renderNameList();
+        initDepartmentSelect();
       } else if (data && data.status === 'error') {
         showError("GASエラー: " + data.message);
       } else {
@@ -97,16 +119,53 @@
       }
     };
 
-    // 名前リスト（ボタン一覧）の表示
-    function renderNameList() {
+    // 部署プルダウンの初期化
+    function initDepartmentSelect() {
       const loadingMsg = document.getElementById('loading-msg');
-      const nameList = document.getElementById('name-list');
-      
+      const selectionArea = document.getElementById('selection-area');
+      const deptSelect = document.getElementById('dept-select');
+
       loadingMsg.style.display = 'none';
-      nameList.style.display = 'block';
+      selectionArea.style.display = 'block';
+
+      // 名簿から重複のない部署リストを抽出（空欄のものは「その他」扱い）
+      const departments = Array.from(
+        new Set(cachedParticipants.map(p => (p.department || 'その他').trim()))
+      );
+
+      // プルダウンのオプション作成
+      deptSelect.innerHTML = '<option value="__ALL__">-- すべての部署を表示 --</option>';
+      departments.forEach(dept => {
+        const opt = document.createElement('option');
+        opt.value = dept;
+        opt.innerText = dept;
+        deptSelect.appendChild(opt);
+      });
+
+      // 初期表示（全件表示）
+      filterNamesByDepartment();
+    }
+
+    // 選択された部署に基づいて名前リストを絞り込み表示
+    function filterNamesByDepartment() {
+      const selectedDept = document.getElementById('dept-select').value;
+      const nameList = document.getElementById('name-list');
       nameList.innerHTML = '';
 
-      cachedParticipants.forEach(p => {
+      // 絞り込み条件
+      const filtered = cachedParticipants.filter(p => {
+        if (selectedDept === '__ALL__') return true;
+        const pDept = (p.department || 'その他').trim();
+        return pDept === selectedDept;
+      });
+
+      if (filtered.length === 0) {
+        nameList.innerHTML = '<p class="has-text-grey is-size-7 p-2">該当する参加者がいません</p>';
+        return;
+      }
+
+      // 名前ボタンの生成
+      filtered.forEach(p => {
         const btn = document.createElement('button');
         btn.className = 'button is-white is-outlined name-btn mb-2';
         btn.style.border = '1px solid #dbdbdb';
@@ -122,12 +181,12 @@
       });
     }
 
-    // 名前タップ時の動作
+    // 名前タップ時の処理
     function selectParticipant(id) {
       const participant = cachedParticipants.find(p => p.id === id);
       if (!participant) return;
 
-      if (!confirm(`${participant.name} 様で受付を行ってもよろしいですか？`)) {
+      if (!confirm(`${participant.name} 様（${participant.department || ''}）で受付を行ってもよろしいですか？`)) {
         return;
       }
 
@@ -171,7 +230,7 @@
 
         if (res.isAlreadyAttended) {
           syncStatus.className = "status-badge has-text-warning-dark";
-          syncStatus.innerText = "⚠️️ 既に受付済みです";
+          syncStatus.innerText = "⚠️ 既に受付済みです";
         } else {
           syncStatus.className = "status-badge has-text-success";
           syncStatus.innerText = "✅ お席が確定しました（案内メール送信済）";
@@ -185,7 +244,7 @@
     function resetSelection() {
       document.getElementById('result-card').style.display = 'none';
       document.getElementById('select-card').style.display = 'block';
-      renderNameList();
+      filterNamesByDepartment();
     }
 
     function showError(msg) {
