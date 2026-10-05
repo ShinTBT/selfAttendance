@@ -35,7 +35,7 @@
       text-align: left; 
       justify-content: space-between; 
       height: auto; 
-      padding: 12px 16px; 
+      padding: 14px 16px; 
       white-space: normal; 
     }
   </style>
@@ -46,7 +46,7 @@
     <!-- 1. 部署・名前選択カード -->
     <div id="select-card" class="card p-5">
       <h1 class="title has-text-centered is-4 mb-2">🎉 忘年会 セルフ受付</h1>
-      <p class="has-text-centered has-text-grey is-size-7 mb-4">部署を選択後、お名前をタップしてください</p>
+      <p class="has-text-centered has-text-grey is-size-7 mb-4">まずご自身の部署を選択してください</p>
       
       <!-- 読み込み中表示 -->
       <div id="loading-msg" class="notification is-info is-light has-text-centered">
@@ -57,9 +57,9 @@
       <div id="selection-area" style="display: none;">
         <!-- 部署選択プルダウン -->
         <div class="field mb-4">
-          <label class="label is-small">① 部署を選択</label>
+          <label class="label is-small">① 部署を選択してください</label>
           <div class="control">
-            <div class="select is-fullwidth">
+            <div class="select is-fullwidth is-medium">
               <select id="dept-select" onchange="filterNamesByDepartment()">
                 <!-- JSで動的にオプション生成 -->
               </select>
@@ -67,11 +67,9 @@
           </div>
         </div>
 
-        <hr style="margin: 1rem 0;">
-
-        <!-- 名前選択ボタンリスト -->
-        <div class="field">
-          <label class="label is-small">② お名前を選択</label>
+        <!-- 名前選択エリア（初期状態は非表示） -->
+        <div id="name-area" class="field mt-5" style="display: none;">
+          <label class="label is-small">② お名前をタップしてください</label>
           <div id="name-list" class="buttons">
             <!-- JSで動的にボタン生成 -->
           </div>
@@ -128,33 +126,33 @@
       loadingMsg.style.display = 'none';
       selectionArea.style.display = 'block';
 
-      // 名簿から重複のない部署リストを抽出（空欄のものは「その他」扱い）
+      // 名簿から重複のない部署リストを抽出
       const departments = Array.from(
         new Set(cachedParticipants.map(p => (p.department || 'その他').trim()))
       );
 
-      // プルダウンのオプション作成
-      deptSelect.innerHTML = '<option value="__ALL__">-- すべての部署を表示 --</option>';
+      // 初期状態は未選択にする（名前一覧を隠す）
+      deptSelect.innerHTML = '<option value="" disabled selected>-- 部署を選択してください --</option>';
       departments.forEach(dept => {
         const opt = document.createElement('option');
         opt.value = dept;
         opt.innerText = dept;
         deptSelect.appendChild(opt);
       });
-
-      // 初期表示（全件表示）
-      filterNamesByDepartment();
     }
 
-    // 選択された部署に基づいて名前リストを絞り込み表示
+    // 部署選択時に該当する人の名前リストだけを表示
     function filterNamesByDepartment() {
       const selectedDept = document.getElementById('dept-select').value;
+      const nameArea = document.getElementById('name-area');
       const nameList = document.getElementById('name-list');
+      
+      if (!selectedDept) return;
+
+      nameArea.style.display = 'block';
       nameList.innerHTML = '';
 
-      // 絞り込み条件
       const filtered = cachedParticipants.filter(p => {
-        if (selectedDept === '__ALL__') return true;
         const pDept = (p.department || 'その他').trim();
         return pDept === selectedDept;
       });
@@ -164,16 +162,15 @@
         return;
       }
 
-      // 名前ボタンの生成
       filtered.forEach(p => {
         const btn = document.createElement('button');
         btn.className = 'button is-white is-outlined name-btn mb-2';
         btn.style.border = '1px solid #dbdbdb';
         
         if (p.isAttended && p.seat) {
-          btn.innerHTML = `<span><strong>${p.name}</strong> <small class="has-text-grey">(${p.department || ''})</small></span><span class="tag is-warning is-light">受付済</span>`;
+          btn.innerHTML = `<span><strong>${p.name}</strong></span><span class="tag is-warning is-light">受付済</span>`;
         } else {
-          btn.innerHTML = `<span><strong>${p.name}</strong> <small class="has-text-grey">(${p.department || ''})</small></span><span class="tag is-info is-light">未受付</span>`;
+          btn.innerHTML = `<span><strong>${p.name}</strong></span><span class="tag is-info is-light">未受付</span>`;
         }
 
         btn.onclick = () => selectParticipant(p.id);
@@ -181,13 +178,16 @@
       });
     }
 
-    // 名前タップ時の処理
+    // 名前タップ時の誤操作防止ポップアップ確認
     function selectParticipant(id) {
       const participant = cachedParticipants.find(p => p.id === id);
       if (!participant) return;
 
-      if (!confirm(`${participant.name} 様（${participant.department || ''}）で受付を行ってもよろしいですか？`)) {
-        return;
+      // 押し間違い防止のポップアップダイアログ
+      const confirmText = `【受付確認】\n\nお名前：${participant.name} 様\n部 署：${participant.department || ''}\n\n上記のお名前で受付を行ってもよろしいですか？`;
+      
+      if (!confirm(confirmText)) {
+        return; // キャンセルした場合は何も処理を行わない
       }
 
       document.getElementById('select-card').style.display = 'none';
@@ -207,7 +207,6 @@
         syncStatus.innerText = "⏳ お席をランダム割り当て中...";
         participant.isAttended = true;
 
-        // JSONPによる非同期記録送信
         const recordScript = document.createElement('script');
         recordScript.src = `${GAS_API_URL}?action=record&id=${encodeURIComponent(id)}&callback=handleRecordComplete&_=${new Date().getTime()}`;
         recordScript.onerror = function() {
@@ -218,7 +217,7 @@
       }
     }
 
-    // 受付完了＆座席確定のレスポンス処理
+    // レスポンス処理
     window.handleRecordComplete = function(res) {
       const syncStatus = document.getElementById('sync-status');
       const resSeat = document.getElementById('res-seat');
@@ -244,7 +243,10 @@
     function resetSelection() {
       document.getElementById('result-card').style.display = 'none';
       document.getElementById('select-card').style.display = 'block';
-      filterNamesByDepartment();
+      
+      // プルダウンを初期位置に戻す
+      document.getElementById('dept-select').selectedIndex = 0;
+      document.getElementById('name-area').style.display = 'none';
     }
 
     function showError(msg) {
@@ -253,7 +255,6 @@
       loadingMsg.innerHTML = msg;
     }
 
-    // 起動時の初期データ読み込み
     window.onload = function() {
       const script = document.createElement('script');
       script.src = `${GAS_API_URL}?action=getData&callback=handleDataLoaded&_=${new Date().getTime()}`;
