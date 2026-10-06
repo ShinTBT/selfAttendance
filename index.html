@@ -19,16 +19,16 @@
       width: 100%; 
     }
     .seat-badge { 
-      font-size: 3rem; 
+      font-size: 2.5rem; 
       font-weight: bold; 
       color: #e53935; 
       background: #ffebee; 
-      padding: 15px 30px; 
+      padding: 12px 24px; 
       border-radius: 16px; 
       display: inline-block; 
     }
     .status-badge { 
-      font-size: 1rem; 
+      font-size: 0.95rem; 
       font-weight: bold; 
     }
     .name-btn { 
@@ -44,6 +44,18 @@
       border-radius: 12px;
       overflow: hidden;
       background: #000;
+    }
+    /* 座席案内画像用のスタイル */
+    .seat-map-container {
+      border: 2px dashed #dbdbdb;
+      border-radius: 12px;
+      padding: 8px;
+      background-color: #fafafa;
+    }
+    .seat-map-img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
     }
   </style>
 </head>
@@ -92,20 +104,28 @@
 
     <!-- 2. 受付完了＆お席案内カード -->
     <div id="result-card" class="card has-text-centered p-5" style="display: none;">
-      <p class="is-size-6 has-text-success-dark has-text-weight-bold mb-2">✅ 受付が完了しました！</p>
-      <p id="res-dept" class="is-size-5 mb-1 has-text-grey"></p>
-      <p id="res-name" class="is-size-2 has-text-weight-bold mb-4"></p>
+      <p class="is-size-6 has-text-success-dark has-text-weight-bold mb-1">✅ 受付が完了しました！</p>
+      <p id="res-dept" class="is-size-6 mb-1 has-text-grey"></p>
+      <p id="res-name" class="is-size-3 has-text-weight-bold mb-3"></p>
       
-      <hr style="margin: 1.5rem 0;">
-
-      <p class="is-size-6 has-text-weight-bold mb-2">本日のお席はこちらです</p>
-      <div class="my-3">
+      <div class="my-2">
+        <p class="is-size-7 has-text-weight-bold has-text-grey mb-1">本日のお席</p>
         <span id="res-seat" class="seat-badge"></span>
       </div>
 
-      <p id="sync-status" class="status-badge has-text-grey mt-4"></p>
+      <p id="sync-status" class="status-badge has-text-grey my-3"></p>
+
+      <!-- 💡 座席案内MAP画像表示エリア -->
+      <div class="seat-map-container mt-4">
+        <p class="is-size-7 has-text-weight-bold has-text-grey mb-2">🗺️️ 会場座席マップ</p>
+        
+        <!-- srcのURLをGoogleドライブのダイレクトURLに差し替え -->
+        <img src="https://drive.google.com/file/d/178Pv7YpkU_zGfG_BrwGtVySIp_OUcX2_/view?usp=sharing" alt="会場座席マップ" class="seat-map-img" onerror="this.style.display='none'; document.getElementById('map-error').style.display='block';">
+        
+        <p id="map-error" class="is-size-7 has-text-grey-light" style="display:none;">※マップ画像の読み込みに失敗しました</p>
+      </div>
       
-      <div id="back-btn-area" class="mt-5" style="display: none;">
+      <div id="back-btn-area" class="mt-4" style="display: none;">
         <button onclick="resetSelection()" class="button is-light is-small">← 選択画面に戻る</button>
       </div>
     </div>
@@ -113,7 +133,7 @@
   </section>
 
   <script>
-    const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxlDFQLyMiWDSezU3Kx3kO9jX6FrnV5jpbIh3pgfNeN5a0wcb1_JvxgVO6QnsSb-X9kBA/exec';
+    const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbx2_ivlGUTS31U-yoOIi3_y4kjVrUBjUBbEi0R1neI5pYrZ98it7pl7Q-rZnX06ucvtZQ/exec';
 
     let cachedParticipants = [];
     let currentUser = null;
@@ -124,7 +144,6 @@
       return urlParams.get(param);
     }
 
-    // データ読み込み処理（fetch API を使用してスマホのブロックを回避）
     async function loadData() {
       try {
         const response = await fetch(`${GAS_API_URL}?action=getData`);
@@ -153,7 +172,7 @@
           showError("データ形式が不正です。スプレッドシートをご確認ください。");
         }
       } catch (err) {
-        showError("❌ データの通信に失敗しました。<br>GASのアクセス権限が『全員』に設定されているかご確認ください。");
+        showError("❌ データの通信に失敗しました。<br>GASのアクセス権限をご確認ください。");
       }
     }
 
@@ -258,7 +277,6 @@
       executeAttendanceRecord(participant);
     }
 
-    // 受付記録処理（fetch API）
     async function executeAttendanceRecord(participant) {
       currentUser = participant;
       document.getElementById('main-card').style.display = 'none';
@@ -321,7 +339,6 @@
       loadingMsg.innerHTML = msg;
     }
 
-    // 起動時にデータを読み込み
     window.onload = loadData;
   </script>
 </body>
