@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>忘年会 セルフ受付</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
-  <!-- カメラでQRコードを読み取るためのライブラリ -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
     body { 
@@ -125,43 +124,45 @@
       return urlParams.get(param);
     }
 
-    // データ読み込みコールバック
-    window.handleDataLoaded = function(data) {
-      if (data && Array.isArray(data)) {
-        cachedParticipants = data;
-        document.getElementById('loading-msg').style.display = 'none';
-
-        // URLパラメータ ?uid=usr001 を取得
-        const targetUserId = getQueryParam('uid');
+    // データ読み込み処理（fetch API を使用してスマホのブロックを回避）
+    async function loadData() {
+      try {
+        const response = await fetch(`${GAS_API_URL}?action=getData`);
+        if (!response.ok) throw new Error("HTTP error " + response.status);
         
-        if (targetUserId) {
-          // 【モードA】個人用URL（?uid=xxx） ➔ 本人確認後、カメラ読み取り起動
-          currentUser = cachedParticipants.find(p => p.id === targetUserId.trim());
-          if (!currentUser) {
-            showError("該当する参加者データが見つかりません (ID: " + targetUserId + ")");
-            return;
-          }
-          setupCameraCheckIn();
-        } else {
-          // 【モードB】直接アクセス ➔ 手動リスト選択モード
-          document.getElementById('back-btn-area').style.display = 'block';
-          setupManualCheckIn();
-        }
-      } else if (data && data.status === 'error') {
-        showError("GASエラー: " + data.message);
-      } else {
-        showError("データ形式が不正です。スプレッドシートをご確認ください。");
-      }
-    };
+        const data = await response.json();
+        
+        if (Array.isArray(data)) {
+          cachedParticipants = data;
+          document.getElementById('loading-msg').style.display = 'none';
 
-    // --- 【モードA】カメラ読み取りの処理 ---
+          const targetUserId = getQueryParam('uid');
+          
+          if (targetUserId) {
+            currentUser = cachedParticipants.find(p => p.id === targetUserId.trim());
+            if (!currentUser) {
+              showError("該当する参加者データが見つかりません (ID: " + targetUserId + ")");
+              return;
+            }
+            setupCameraCheckIn();
+          } else {
+            document.getElementById('back-btn-area').style.display = 'block';
+            setupManualCheckIn();
+          }
+        } else {
+          showError("データ形式が不正です。スプレッドシートをご確認ください。");
+        }
+      } catch (err) {
+        showError("❌ データの通信に失敗しました。<br>GASのアクセス権限が『全員』に設定されているかご確認ください。");
+      }
+    }
+
     function setupCameraCheckIn() {
       document.getElementById('camera-area').style.display = 'block';
       document.getElementById('user-welcome').innerText = `${currentUser.name} 様`;
 
-      // 既に受付済みの場合は結果画面を表示
       if (currentUser.isAttended && currentUser.seat) {
-        showResultCard("⚠️️ 既に受付済みです");
+        showResultCard("⚠️ 既に受付済みです");
         return;
       }
 
@@ -177,23 +178,20 @@
         config, 
         onScanSuccess
       ).catch(err => {
-        showError("カメラの起動に失敗しました。カメラの利用権限を許可してください。<br>※PCの場合は内蔵カメラまたはWebカメラが必要です。");
+        showError("📷 カメラの起動に失敗しました。<br>ブラウザの「カメラアクセス権限」を許可してください。");
       });
     }
 
-    // QRコードが正常に読み取られた時
     function onScanSuccess(decodedText) {
-      // ポスターの受付URL（shintbt.github.io/selfAttendance）が読み取れたら受付実行
       if (decodedText.includes('shintbt.github.io/selfAttendance')) {
         if (html5QrCode) {
-          html5QrCode.stop().then(() => executeAttendanceRecord(currentUser));
+          html5QrCode.stop().then(() => executeAttendanceRecord(currentUser)).catch(() => executeAttendanceRecord(currentUser));
         } else {
           executeAttendanceRecord(currentUser);
         }
       }
     }
 
-    // --- 【モードB】手動リスト選択の処理 ---
     function setupManualCheckIn() {
       document.getElementById('manual-area').style.display = 'block';
       const deptSelect = document.getElementById('dept-select');
@@ -260,23 +258,40 @@
       executeAttendanceRecord(participant);
     }
 
-    // --- 共通の受付確定＆GAS通信処理 ---
-    function executeAttendanceRecord(participant) {
+    // 受付記録処理（fetch API）
+    async function executeAttendanceRecord(participant) {
       currentUser = participant;
       document.getElementById('main-card').style.display = 'none';
-      showResultCard("⏳ お席をランダム割り当て中...");
+      showResultCard("⏳ お席を割り当て中...");
 
       currentUser.isAttended = true;
 
-      // GASへの送信用は action=record&id=xxx をそのまま使用
-      const recordScript = document.createElement('script');
-      recordScript.src = `${GAS_API_URL}?action=record&id=${encodeURIComponent(currentUser.id)}&callback=handleRecordComplete&_=${new Date().getTime()}`;
-      recordScript.onerror = function() {
+      try {
+        const response = await fetch(`${GAS_API_URL}?action=record&id=${encodeURIComponent(currentUser.id)}`);
+        const res = await response.json();
+        
+        const syncStatus = document.getElementById('sync-status');
+        const resSeat = document.getElementById('res-seat');
+
+        if (res && res.status === 'success') {
+          if (res.seat) resSeat.innerText = res.seat;
+
+          if (res.isAlreadyAttended) {
+            syncStatus.className = "status-badge has-text-warning-dark";
+            syncStatus.innerText = "⚠️ 既に受付済みです";
+          } else {
+            syncStatus.className = "status-badge has-text-success";
+            syncStatus.innerText = "✅ お席が確定しました";
+          }
+        } else {
+          syncStatus.className = "status-badge has-text-danger";
+          syncStatus.innerText = "❌ 記録エラーが発生しました";
+        }
+      } catch (err) {
         const syncStatus = document.getElementById('sync-status');
         syncStatus.className = "status-badge has-text-danger";
-        syncStatus.innerText = "❌ 通信エラーが発生しました";
-      };
-      document.body.appendChild(recordScript);
+        syncStatus.innerText = "❌ 送信エラーが発生しました";
+      }
     }
 
     function showResultCard(initialStatusText) {
@@ -292,28 +307,6 @@
       syncStatus.innerText = initialStatusText;
     }
 
-    window.handleRecordComplete = function(res) {
-      const syncStatus = document.getElementById('sync-status');
-      const resSeat = document.getElementById('res-seat');
-      
-      if (res && res.status === 'success') {
-        if (res.seat) {
-          resSeat.innerText = res.seat;
-        }
-
-        if (res.isAlreadyAttended) {
-          syncStatus.className = "status-badge has-text-warning-dark";
-          syncStatus.innerText = "⚠️ 既に受付済みです";
-        } else {
-          syncStatus.className = "status-badge has-text-success";
-          syncStatus.innerText = "✅ お席が確定しました（案内メール送信済）";
-        }
-      } else {
-        syncStatus.className = "status-badge has-text-danger";
-        syncStatus.innerText = "❌ 記録エラー: " + (res ? res.message : '通信失敗');
-      }
-    };
-
     function resetSelection() {
       document.getElementById('result-card').style.display = 'none';
       document.getElementById('main-card').style.display = 'block';
@@ -328,14 +321,8 @@
       loadingMsg.innerHTML = msg;
     }
 
-    window.onload = function() {
-      const script = document.createElement('script');
-      script.src = `${GAS_API_URL}?action=getData&callback=handleDataLoaded&_=${new Date().getTime()}`;
-      script.onerror = function() {
-        showError("通信エラーが発生しました。接続状況をご確認ください。");
-      };
-      document.body.appendChild(script);
-    };
+    // 起動時にデータを読み込み
+    window.onload = loadData;
   </script>
 </body>
 </html>
