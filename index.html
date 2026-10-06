@@ -43,14 +43,14 @@
 <body>
   <section class="container" style="max-width: 500px;">
 
-    <!-- 1. 部署・名前選択カード -->
+    <!-- 1. 部署・名前選択カード (共通QRコード用) -->
     <div id="select-card" class="card p-5">
       <h1 class="title has-text-centered is-4 mb-2">🎉 忘年会 セルフ受付</h1>
       <p class="has-text-centered has-text-grey is-size-7 mb-4">まずご自身の部署を選択してください</p>
       
       <!-- 読み込み中表示 -->
       <div id="loading-msg" class="notification is-info is-light has-text-centered">
-        参加者名簿を読み込んでいます...
+        参加者名簿を照会しています...
       </div>
 
       <!-- メイン選択エリア -->
@@ -92,7 +92,7 @@
 
       <p id="sync-status" class="status-badge has-text-grey mt-4"></p>
       
-      <div class="mt-5">
+      <div id="back-btn-area" class="mt-5" style="display: none;">
         <button onclick="resetSelection()" class="button is-light is-small">← 選択画面に戻る</button>
       </div>
     </div>
@@ -105,11 +105,27 @@
 
     let cachedParticipants = [];
 
+    // URLのパラメータからIDを取得 (例: index.html?id=usr001)
+    function getQueryParam(param) {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get(param);
+    }
+
     // 初期データ読み込みコールバック
     window.handleDataLoaded = function(data) {
       if (data && Array.isArray(data)) {
         cachedParticipants = data;
-        initDepartmentSelect();
+
+        // URLに ?id=xxx がついているか判定
+        const targetId = getQueryParam('id');
+        if (targetId) {
+          // 個人専用URLからのアクセスの場合は即時受付実行
+          processDirectCheckIn(targetId.trim());
+        } else {
+          // パラメータがない場合は手動選択画面を表示
+          document.getElementById('back-btn-area').style.display = 'block';
+          initDepartmentSelect();
+        }
       } else if (data && data.status === 'error') {
         showError("GASエラー: " + data.message);
       } else {
@@ -117,7 +133,18 @@
       }
     };
 
-    // 部署プルダウンの初期化
+    // 【個人用URL時】自動即時受付処理
+    function processDirectCheckIn(id) {
+      const participant = cachedParticipants.find(p => p.id === id);
+      if (!participant) {
+        showError("該当する参加者データが見つかりません (ID: " + id + ")");
+        return;
+      }
+
+      executeAttendanceRecord(participant);
+    }
+
+    // 【共通URL時】部署プルダウンの初期化
     function initDepartmentSelect() {
       const loadingMsg = document.getElementById('loading-msg');
       const selectionArea = document.getElementById('selection-area');
@@ -126,12 +153,10 @@
       loadingMsg.style.display = 'none';
       selectionArea.style.display = 'block';
 
-      // 名簿から重複のない部署リストを抽出
       const departments = Array.from(
         new Set(cachedParticipants.map(p => (p.department || 'その他').trim()))
       );
 
-      // 初期状態は未選択にする（名前一覧を隠す）
       deptSelect.innerHTML = '<option value="" disabled selected>-- 部署を選択してください --</option>';
       departments.forEach(dept => {
         const opt = document.createElement('option');
@@ -141,7 +166,7 @@
       });
     }
 
-    // 部署選択時に該当する人の名前リストだけを表示
+    // 部署選択時に該当する人の名前リストを表示
     function filterNamesByDepartment() {
       const selectedDept = document.getElementById('dept-select').value;
       const nameArea = document.getElementById('name-area');
@@ -178,18 +203,22 @@
       });
     }
 
-    // 名前タップ時の誤操作防止ポップアップ確認
+    // 手動選択時の確認ポップアップ
     function selectParticipant(id) {
       const participant = cachedParticipants.find(p => p.id === id);
       if (!participant) return;
 
-      // 押し間違い防止のポップアップダイアログ
       const confirmText = `【受付確認】\n\nお名前：${participant.name} 様\n部 署：${participant.department || ''}\n\n上記のお名前で受付を行ってもよろしいですか？`;
       
       if (!confirm(confirmText)) {
-        return; // キャンセルした場合は何も処理を行わない
+        return;
       }
 
+      executeAttendanceRecord(participant);
+    }
+
+    // 共通の受付実行＆GAS通信処理
+    function executeAttendanceRecord(participant) {
       document.getElementById('select-card').style.display = 'none';
       document.getElementById('result-card').style.display = 'block';
 
@@ -208,7 +237,7 @@
         participant.isAttended = true;
 
         const recordScript = document.createElement('script');
-        recordScript.src = `${GAS_API_URL}?action=record&id=${encodeURIComponent(id)}&callback=handleRecordComplete&_=${new Date().getTime()}`;
+        recordScript.src = `${GAS_API_URL}?action=record&id=${encodeURIComponent(participant.id)}&callback=handleRecordComplete&_=${new Date().getTime()}`;
         recordScript.onerror = function() {
           syncStatus.className = "status-badge has-text-danger";
           syncStatus.innerText = "❌ 通信エラーが発生しました";
@@ -217,7 +246,7 @@
       }
     }
 
-    // レスポンス処理
+    // GASからの記録結果受け取り
     window.handleRecordComplete = function(res) {
       const syncStatus = document.getElementById('sync-status');
       const resSeat = document.getElementById('res-seat');
@@ -244,7 +273,6 @@
       document.getElementById('result-card').style.display = 'none';
       document.getElementById('select-card').style.display = 'block';
       
-      // プルダウンを初期位置に戻す
       document.getElementById('dept-select').selectedIndex = 0;
       document.getElementById('name-area').style.display = 'none';
     }
