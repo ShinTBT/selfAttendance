@@ -51,10 +51,25 @@
       border-radius: 12px;
       padding: 8px;
       background-color: #fafafa;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .seat-map-container:hover {
+      opacity: 0.85;
     }
     .seat-map-img {
       max-width: 100%;
       height: auto;
+      border-radius: 8px;
+    }
+    /* モーダル画像表示の調整 */
+    .modal-content-img {
+      max-width: 95vw;
+      max-height: 90vh;
+      width: auto;
+      height: auto;
+      margin: 0 auto;
+      display: block;
       border-radius: 8px;
     }
   </style>
@@ -115,13 +130,10 @@
 
       <p id="sync-status" class="status-badge has-text-grey my-3"></p>
 
-      <!-- 💡 座席案内MAP画像表示エリア -->
-      <div class="seat-map-container mt-4">
-        <p class="is-size-7 has-text-weight-bold has-text-grey mb-2">🗺️️ 会場座席マップ</p>
-        
-        <!-- srcのURLをGoogleドライブのダイレクトURLに差し替え -->
+      <!-- 💡 座席案内MAP画像表示エリア（タップで拡大可能） -->
+      <div class="seat-map-container mt-4" onclick="openMapModal()">
+        <p class="is-size-7 has-text-weight-bold has-text-grey mb-1">🗺️ 会場座席マップ <span class="has-text-info">(タップで拡大)</span></p>
         <img src="https://lh3.googleusercontent.com/d/178Pv7YpkU_zGfG_BrwGtVySIp_OUcX2_" alt="会場座席マップ" class="seat-map-img" onerror="this.style.display='none'; document.getElementById('map-error').style.display='block';">
-        
         <p id="map-error" class="is-size-7 has-text-grey-light" style="display:none;">※マップ画像の読み込みに失敗しました</p>
       </div>
       
@@ -131,6 +143,15 @@
     </div>
 
   </section>
+
+  <!-- 💡 画像拡大表示用モーダル（画面全体に暗幕表示） -->
+  <div id="map-modal" class="modal" onclick="closeMapModal()">
+    <div class="modal-background"></div>
+    <div class="modal-content is-flex is-justify-content-center is-align-items-center">
+      <img src="https://lh3.googleusercontent.com/d/178Pv7YpkU_zGfG_BrwGtVySIp_OUcX2_" alt="拡大マップ" class="modal-content-img">
+    </div>
+    <button class="modal-close is-large" aria-label="close" onclick="closeMapModal()"></button>
+  </div>
 
   <script>
     const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxlDFQLyMiWDSezU3Kx3kO9jX6FrnV5jpbIh3pgfNeN5a0wcb1_JvxgVO6QnsSb-X9kBA/exec';
@@ -337,6 +358,15 @@
       const loadingMsg = document.getElementById('loading-msg');
       loadingMsg.className = "notification is-danger is-light";
       loadingMsg.innerHTML = msg;
+    }
+
+    /* 💡 マップ画像拡大・縮小処理 */
+    function openMapModal() {
+      document.getElementById('map-modal').classList.add('is-active');
+    }
+
+    function closeMapModal() {
+      document.getElementById('map-modal').classList.remove('is-active');
     }
 
     window.onload = loadData;
