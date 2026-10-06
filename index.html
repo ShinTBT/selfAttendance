@@ -51,7 +51,7 @@
 <body>
   <section class="container" style="max-width: 500px;">
 
-    <!-- 1. メイン受付カード（モードによって表示を切替） -->
+    <!-- 1. メイン受付カード -->
     <div id="main-card" class="card p-5">
       <h1 class="title has-text-centered is-4 mb-2">🎉 忘年会 セルフ受付</h1>
       
@@ -62,8 +62,10 @@
 
       <!-- A. 個人リンク用：カメラ読み取りエリア -->
       <div id="camera-area" style="display: none;">
-        <p id="user-welcome" class="has-text-centered has-text-weight-bold is-size-5 mb-1"></p>
-        <p class="has-text-centered has-text-grey is-size-7 mb-4">ポスターの受付QRコードをかざしてください</p>
+        <p id="user-welcome" class="has-text-centered has-text-weight-bold is-size-4 mb-1"></p>
+        <div class="notification is-warning is-light has-text-centered py-2 px-3 my-3">
+          <p class="is-size-7 has-text-weight-bold">📷 会場入口の受付QRコードをカメラにかざしてください</p>
+        </div>
         <div id="reader"></div>
       </div>
 
@@ -76,7 +78,6 @@
           <div class="control">
             <div class="select is-fullwidth is-medium">
               <select id="dept-select" onchange="filterNamesByDepartment()">
-                <!-- JSで動的にオプション生成 -->
               </select>
             </div>
           </div>
@@ -85,7 +86,6 @@
         <div id="name-area" class="field mt-5" style="display: none;">
           <label class="label is-small">② お名前をタップしてください</label>
           <div id="name-list" class="buttons">
-            <!-- JSで動的にボタン生成 -->
           </div>
         </div>
       </div>
@@ -131,18 +131,19 @@
         cachedParticipants = data;
         document.getElementById('loading-msg').style.display = 'none';
 
-        const targetId = getQueryParam('id');
+        // URLパラメータ ?uid=usr001 を取得
+        const targetUserId = getQueryParam('uid');
         
-        if (targetId) {
-          // 【モードA】個人用URL（?id=xxx）の場合 ➔ カメラ読み取りモード
-          currentUser = cachedParticipants.find(p => p.id === targetId.trim());
+        if (targetUserId) {
+          // 【モードA】個人用URL（?uid=xxx） ➔ 本人確認後、カメラ読み取り起動
+          currentUser = cachedParticipants.find(p => p.id === targetUserId.trim());
           if (!currentUser) {
-            showError("該当する参加者データが見つかりません (ID: " + targetId + ")");
+            showError("該当する参加者データが見つかりません (ID: " + targetUserId + ")");
             return;
           }
           setupCameraCheckIn();
         } else {
-          // 【モードB】直接アクセスの場合 ➔ 手動リスト選択モード
+          // 【モードB】直接アクセス ➔ 手動リスト選択モード
           document.getElementById('back-btn-area').style.display = 'block';
           setupManualCheckIn();
         }
@@ -158,8 +159,9 @@
       document.getElementById('camera-area').style.display = 'block';
       document.getElementById('user-welcome').innerText = `${currentUser.name} 様`;
 
+      // 既に受付済みの場合は結果画面を表示
       if (currentUser.isAttended && currentUser.seat) {
-        showResultCard("⚠️ 既に受付済みです");
+        showResultCard("⚠️️ 既に受付済みです");
         return;
       }
 
@@ -175,11 +177,13 @@
         config, 
         onScanSuccess
       ).catch(err => {
-        showError("カメラの起動に失敗しました。カメラの利用権限を許可してください。");
+        showError("カメラの起動に失敗しました。カメラの利用権限を許可してください。<br>※PCの場合は内蔵カメラまたはWebカメラが必要です。");
       });
     }
 
+    // QRコードが正常に読み取られた時
     function onScanSuccess(decodedText) {
+      // ポスターの受付URL（shintbt.github.io/selfAttendance）が読み取れたら受付実行
       if (decodedText.includes('shintbt.github.io/selfAttendance')) {
         if (html5QrCode) {
           html5QrCode.stop().then(() => executeAttendanceRecord(currentUser));
@@ -264,6 +268,7 @@
 
       currentUser.isAttended = true;
 
+      // GASへの送信用は action=record&id=xxx をそのまま使用
       const recordScript = document.createElement('script');
       recordScript.src = `${GAS_API_URL}?action=record&id=${encodeURIComponent(currentUser.id)}&callback=handleRecordComplete&_=${new Date().getTime()}`;
       recordScript.onerror = function() {
