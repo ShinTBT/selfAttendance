@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>忘年会 セルフ受付</title>
+  <link rel="shortcut icon" href="#">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
@@ -161,7 +162,8 @@
   </div>
 
   <script>
-    const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxlDFQLyMiWDSezU3Kx3kO9jX6FrnV5jpbIh3pgfNeN5a0wcb1_JvxgVO6QnsSb-X9kBA/exec';
+    // 💡 GitHub Actionsビルド時に Secrets の値に自動展開されます
+    const GAS_API_URL = '%%GAS_API_URL%%';
 
     let cachedParticipants = [];
     let currentUser = null;
