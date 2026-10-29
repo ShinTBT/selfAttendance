@@ -55,6 +55,17 @@
         <div class="notification is-info is-light p-2 is-size-7 has-text-centered">
           1〜75の中から<strong>お好きな数字を24個</strong>選んでタップしてください（残り: <span id="remain-count">24</span>個）
         </div>
+
+        <!-- 💡 おまかせランダム選択ボタン ＆ クリアボタン -->
+        <div class="buttons is-centered mb-3">
+          <button onclick="selectRandomNumbers()" class="button is-info is-light is-small">
+            🎲 おまかせで24個選ぶ
+          </button>
+          <button onclick="clearSelection()" class="button is-light is-small">
+            🗑️ 選択をリセット
+          </button>
+        </div>
+
         <div class="num-picker mb-3" id="picker-grid"></div>
         <button id="save-btn" onclick="saveCard()" class="button is-primary is-fullwidth" disabled>この24個でビンゴカードを確定する</button>
       </div>
@@ -70,43 +81,89 @@
   </section>
 
   <script>
-    // 💡 GitHub Actionsビルド時に Secrets の値に自動展開されます
+    // 💡 本番のGAS URLを直接設定
     const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxlDFQLyMiWDSezU3Kx3kO9jX6FrnV5jpbIh3pgfNeN5a0wcb1_JvxgVO6QnsSb-X9kBA/exec';
     const urlParams = new URLSearchParams(window.location.search);
-    const userId = urlParams.get('uid');
+    const userId = urlParams.get('uid') || 'guest';
+
+    // 💡 ユーザーごとに保存キーを分離
+    const STORAGE_KEY_SELECTED = `bingo_selected_${userId}`;
+    const STORAGE_KEY_CARD = `bingo_card_${userId}`;
 
     let selectedNumbers = [];
-    let myCard = []; // 25マスの配列（真ん中はFREE）
+    let myCard = []; // 25マスの配列（中央はFREE）
     let drawnNumbers = [];
 
-    // ナンバーピッカー初期化
+    // 画面初期化
     function initPicker() {
       const picker = document.getElementById('picker-grid');
+      picker.innerHTML = '';
       for (let i = 1; i <= 75; i++) {
         const btn = document.createElement('button');
+        btn.id = `btn-num-${i}`;
         btn.className = 'button is-small is-outlined num-btn';
         btn.innerText = i;
-        btn.onclick = () => toggleNumber(i, btn);
+        btn.onclick = () => toggleNumber(i);
         picker.appendChild(btn);
       }
     }
 
-    function toggleNumber(num, btn) {
+    // 数字の選択/解除
+    function toggleNumber(num) {
       const index = selectedNumbers.indexOf(num);
       if (index > -1) {
         selectedNumbers.splice(index, 1);
-        btn.classList.remove('is-link');
       } else {
         if (selectedNumbers.length >= 24) return;
         selectedNumbers.push(num);
-        btn.classList.add('is-link');
       }
-      
+      saveDraftState();
+      updatePickerUI();
+    }
+
+    // 💡 🎲 おまかせでランダムに24個選択
+    function selectRandomNumbers() {
+      const allNumbers = Array.from({length: 75}, (_, i) => i + 1);
+      // フィッシャー–イェーツのシャッフル
+      for (let i = allNumbers.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [allNumbers[i], allNumbers[j]] = [allNumbers[j], allNumbers[i]];
+      }
+      selectedNumbers = allNumbers.slice(0, 24);
+      saveDraftState();
+      updatePickerUI();
+    }
+
+    // 💡 🗑️ 選択クリア
+    function clearSelection() {
+      selectedNumbers = [];
+      saveDraftState();
+      updatePickerUI();
+    }
+
+    // UI表示の更新
+    function updatePickerUI() {
+      for (let i = 1; i <= 75; i++) {
+        const btn = document.getElementById(`btn-num-${i}`);
+        if (btn) {
+          if (selectedNumbers.includes(i)) {
+            btn.classList.add('is-link');
+          } else {
+            btn.classList.remove('is-link');
+          }
+        }
+      }
       const remain = 24 - selectedNumbers.length;
       document.getElementById('remain-count').innerText = remain;
       document.getElementById('save-btn').disabled = (remain !== 0);
     }
 
+    // 💡 選択途中データをローカルストレージへ一時保存
+    function saveDraftState() {
+      localStorage.setItem(STORAGE_KEY_SELECTED, JSON.stringify(selectedNumbers));
+    }
+
+    // カード決定・GAS送信
     async function saveCard() {
       if (selectedNumbers.length !== 24) return;
       
@@ -117,15 +174,21 @@
       myCard = [...selectedNumbers];
       myCard.splice(12, 0, 'FREE');
 
+      // 💡 確定カード情報をローカルに永続化保存
+      localStorage.setItem(STORAGE_KEY_CARD, JSON.stringify(myCard));
+
       try {
-        // GASに保存
-        if (userId) {
+        if (userId && userId !== 'guest') {
           await fetch(`${GAS_API_URL}?action=saveBingoCard&id=${encodeURIComponent(userId)}&numbers=${encodeURIComponent(JSON.stringify(myCard))}`);
         }
       } catch (e) {
         console.error("カード保存エラー:", e);
       }
 
+      switchToGameArea();
+    }
+
+    function switchToGameArea() {
       document.getElementById('setup-area').style.display = 'none';
       document.getElementById('game-area').style.display = 'block';
       renderBoard();
@@ -167,13 +230,12 @@
     }
 
     function checkBingoStatus() {
-      // 5x5のヒット状況判定ロジック
       const hits = myCard.map((val) => val === 'FREE' || drawnNumbers.includes(Number(val)));
       
       const lines = [
-        [0,1,2,3,4],[5,6,7,8,9],[10,11,12,13,14],[15,16,17,18,19],[20,21,22,23,24], // 横
-        [0,5,10,15,20],[1,6,11,16,21],[2,7,12,17,22],[3,8,13,18,23],[4,9,14,19,24], // 縦
-        [0,6,12,18,24],[4,8,12,16,20] // 斜め
+        [0,1,2,3,4],[5,6,7,8,9],[10,11,12,13,14],[15,16,17,18,19],[20,21,22,23,24],
+        [0,5,10,15,20],[1,6,11,16,21],[2,7,12,17,22],[3,8,13,18,23],[4,9,14,19,24],
+        [0,6,12,18,24],[4,8,12,16,20]
       ];
 
       let bingoCount = 0;
@@ -198,8 +260,28 @@
       }
     }
 
+    // 💡 ページ読み込み時に復元処理
     window.onload = () => {
       initPicker();
+
+      // 1. 既に確定済みのカードがあるかチェック
+      const savedCard = localStorage.getItem(STORAGE_KEY_CARD);
+      if (savedCard) {
+        try {
+          myCard = JSON.parse(savedCard);
+          switchToGameArea();
+          return;
+        } catch (e) {}
+      }
+
+      // 2. 確定前で、選択途中の数字があれば復元
+      const savedSelected = localStorage.getItem(STORAGE_KEY_SELECTED);
+      if (savedSelected) {
+        try {
+          selectedNumbers = JSON.parse(savedSelected);
+          updatePickerUI();
+        } catch (e) {}
+      }
     };
   </script>
 </body>
