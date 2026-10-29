@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ビンゴ抽選スクリーン</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+  <style>
+    body { background-color: #0b0f19; color: #fff; min-height: 100vh; padding: 20px; font-family: sans-serif; }
+    .main-number {
+      font-size: 10rem;
+      font-weight: 900;
+      color: #ffd12a;
+      text-shadow: 0 0 30px rgba(255, 209, 42, 0.6);
+      line-height: 1;
+    }
+    .history-grid {
+      display: grid;
+      grid-template-columns: repeat(15, 1fr);
+      gap: 6px;
+      background: rgba(255,255,255,0.05);
+      padding: 15px;
+      border-radius: 12px;
+    }
+    .history-num {
+      aspect-ratio: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      border-radius: 6px;
+      background: #1a2235;
+      color: #556;
+    }
+    .history-num.active {
+      background: #f14668;
+      color: #fff;
+      box-shadow: 0 0 10px #f14668;
+    }
+  </style>
+</head>
+<body>
+  <div class="container has-text-centered">
+    <h1 class="title is-3 has-text-warning">🎉 忘年会 大ビンゴ大会 🎉</h1>
+
+    <!-- 抽選メイン表示エリア -->
+    <div class="my-5">
+      <div id="display-number" class="main-number">?</div>
+    </div>
+
+    <button id="draw-btn" onclick="startDraw()" class="button is-danger is-large is-rounded px-6 my-4" style="font-size: 1.8rem; font-weight: bold;">
+      🎰 数字を引く！
+    </button>
+
+    <!-- 1~75の全履歴ボード -->
+    <div class="mt-6">
+      <p class="subtitle is-6 has-text-grey-light mb-2">【 当選番号一覧 】</p>
+      <div class="history-grid" id="history-board"></div>
+    </div>
+  </div>
+
+  <script>
+    const GAS_API_URL = 'https://script.google.com/macros/s/YOUR_GAS_DEPLOYMENT_ID/exec'; // ご自身のGASデプロイURLに差し替え
+    let drawnHistory = [];
+
+    function initHistoryBoard() {
+      const board = document.getElementById('history-board');
+      board.innerHTML = '';
+      for (let i = 1; i <= 75; i++) {
+        const div = document.createElement('div');
+        div.id = `num-${i}`;
+        div.className = 'history-num';
+        div.innerText = i;
+        board.appendChild(div);
+      }
+    }
+
+    async function startDraw() {
+      const btn = document.getElementById('draw-btn');
+      const display = document.getElementById('display-number');
+      btn.disabled = true;
+
+      // ドラムロール演出 (1.5秒間高速で数字をシャッフル)
+      let count = 0;
+      const timer = setInterval(() => {
+        display.innerText = Math.floor(Math.random() * 75) + 1;
+        count++;
+      }, 50);
+
+      try {
+        const res = await fetch(`${GAS_API_URL}?action=drawNumber`);
+        const data = await res.json();
+
+        setTimeout(() => {
+          clearInterval(timer);
+          if (data.status === 'success') {
+            display.innerText = data.newNumber;
+            updateHistory(data.history);
+          } else {
+            alert(data.message);
+          }
+          btn.disabled = false;
+        }, 1500);
+
+      } catch (err) {
+        clearInterval(timer);
+        alert("通信エラーが発生しました");
+        btn.disabled = false;
+      }
+    }
+
+    function updateHistory(history) {
+      drawnHistory = history;
+      for (let i = 1; i <= 75; i++) {
+        const el = document.getElementById(`num-${i}`);
+        if (history.includes(i)) {
+          el.classList.add('active');
+        }
+      }
+    }
+
+    window.onload = () => {
+      initHistoryBoard();
+    };
+  </script>
+</body>
+</html>
