@@ -205,4 +205,187 @@
     }
 
     function setupCameraCheckIn() {
-      document.getElementById('camera-area
+      document.getElementById('camera-area').style.display = 'block';
+      document.getElementById('user-welcome').innerText = `${currentUser.name} 様`;
+
+      if (currentUser.isAttended && currentUser.seat) {
+        showResultCard("⚠️ 既に受付済みです");
+        return;
+      }
+
+      startCameraScanner();
+    }
+
+    function startCameraScanner() {
+      html5QrCode = new Html5Qrcode("reader");
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+      html5QrCode.start(
+        { facingMode: "environment" }, 
+        config, 
+        onScanSuccess
+      ).catch(err => {
+        showError("📷 カメラの起動に失敗しました。<br>ブラウザの「カメラアクセス権限」を許可してください。");
+      });
+    }
+
+    function onScanSuccess(decodedText) {
+      if (decodedText.includes('shintbt.github.io/selfAttendance')) {
+        if (html5QrCode) {
+          html5QrCode.stop().then(() => executeAttendanceRecord(currentUser)).catch(() => executeAttendanceRecord(currentUser));
+        } else {
+          executeAttendanceRecord(currentUser);
+        }
+      }
+    }
+
+    function setupManualCheckIn() {
+      document.getElementById('manual-area').style.display = 'block';
+      const deptSelect = document.getElementById('dept-select');
+
+      const departments = Array.from(
+        new Set(cachedParticipants.map(p => (p.department || 'その他').trim()))
+      );
+
+      deptSelect.innerHTML = '<option value="" disabled selected>-- 部署を選択してください --</option>';
+      departments.forEach(dept => {
+        const opt = document.createElement('option');
+        opt.value = dept;
+        opt.innerText = dept;
+        deptSelect.appendChild(opt);
+      });
+    }
+
+    function filterNamesByDepartment() {
+      const selectedDept = document.getElementById('dept-select').value;
+      const nameArea = document.getElementById('name-area');
+      const nameList = document.getElementById('name-list');
+      
+      if (!selectedDept) return;
+
+      nameArea.style.display = 'block';
+      nameList.innerHTML = '';
+
+      const filtered = cachedParticipants.filter(p => {
+        const pDept = (p.department || 'その他').trim();
+        return pDept === selectedDept;
+      });
+
+      if (filtered.length === 0) {
+        nameList.innerHTML = '<p class="has-text-grey is-size-7 p-2">該当する参加者がいません</p>';
+        return;
+      }
+
+      filtered.forEach(p => {
+        const btn = document.createElement('button');
+        btn.className = 'button is-white is-outlined name-btn mb-2';
+        btn.style.border = '1px solid #dbdbdb';
+        
+        if (p.isAttended && p.seat) {
+          btn.innerHTML = `<span><strong>${p.name}</strong></span><span class="tag is-warning is-light">受付済</span>`;
+        } else {
+          btn.innerHTML = `<span><strong>${p.name}</strong></span><span class="tag is-info is-light">未受付</span>`;
+        }
+
+        btn.onclick = () => selectParticipant(p.id);
+        nameList.appendChild(btn);
+      });
+    }
+
+    function selectParticipant(id) {
+      const participant = cachedParticipants.find(p => p.id === id);
+      if (!participant) return;
+
+      const confirmText = `【受付確認】\n\nお名前：${participant.name} 様\n部 署：${participant.department || ''}\n\n上記のお名前で受付を行ってもよろしいですか？`;
+      
+      if (!confirm(confirmText)) {
+        return;
+      }
+
+      executeAttendanceRecord(participant);
+    }
+
+    async function executeAttendanceRecord(participant) {
+      currentUser = participant;
+      document.getElementById('main-card').style.display = 'none';
+      showResultCard("⏳ お席を割り当て中...");
+
+      currentUser.isAttended = true;
+
+      try {
+        const response = await fetch(`${GAS_API_URL}?action=record&id=${encodeURIComponent(currentUser.id)}`);
+        const res = await response.json();
+        
+        const syncStatus = document.getElementById('sync-status');
+        const resSeat = document.getElementById('res-seat');
+
+        if (res && res.status === 'success') {
+          if (res.seat) resSeat.innerText = res.seat;
+
+          if (res.isAlreadyAttended) {
+            syncStatus.className = "status-badge has-text-warning-dark";
+            syncStatus.innerText = "⚠️ 既に受付済みです";
+          } else {
+            syncStatus.className = "status-badge has-text-success";
+            syncStatus.innerText = "✅ お席が確定しました";
+          }
+        } else {
+          syncStatus.className = "status-badge has-text-danger";
+          syncStatus.innerText = "❌ 記録エラーが発生しました";
+        }
+      } catch (err) {
+        const syncStatus = document.getElementById('sync-status');
+        syncStatus.className = "status-badge has-text-danger";
+        syncStatus.innerText = "❌ 送信エラーが発生しました";
+      }
+    }
+
+    function showResultCard(initialStatusText) {
+      document.getElementById('main-card').style.display = 'none';
+      document.getElementById('result-card').style.display = 'block';
+
+      document.getElementById('res-dept').innerText = currentUser.department || '';
+      document.getElementById('res-name').innerText = (currentUser.name || '') + " 様";
+      document.getElementById('res-seat').innerText = currentUser.seat || '割り当て中...';
+
+      const syncStatus = document.getElementById('sync-status');
+      syncStatus.className = "status-badge has-text-info";
+      syncStatus.innerText = initialStatusText;
+    }
+
+    function resetSelection() {
+      document.getElementById('result-card').style.display = 'none';
+      document.getElementById('main-card').style.display = 'block';
+      
+      document.getElementById('dept-select').selectedIndex = 0;
+      document.getElementById('name-area').style.display = 'none';
+    }
+
+    function showError(msg) {
+      const loadingMsg = document.getElementById('loading-msg');
+      loadingMsg.className = "notification is-danger is-light";
+      loadingMsg.innerHTML = msg;
+    }
+
+    /* 💡 マップ画像拡大・縮小処理 */
+    function openMapModal() {
+      document.getElementById('map-modal').classList.add('is-active');
+    }
+
+    function closeMapModal() {
+      document.getElementById('map-modal').classList.remove('is-active');
+    }
+
+    /* 💡 ビンゴページへの遷移処理 */
+    function goToBingo() {
+      if (currentUser && currentUser.id) {
+        window.location.href = `bingo.html?uid=${encodeURIComponent(currentUser.id)}`;
+      } else {
+        window.location.href = 'bingo.html';
+      }
+    }
+
+    window.onload = loadData;
+  </script>
+</body>
+</html>
