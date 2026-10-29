@@ -2,20 +2,25 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main"] # mainブランチへのPush時に実行
+
+permissions:
+  contents: write # 💡 書き込み権限を明示的に付与（exit code 128対策）
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
+      # 💡 Secrets(GAS_API_URL) の置換処理
       - name: Replace Secrets
         run: |
           sed -i 's|%%GAS_API_URL%%|${{ secrets.GAS_API_URL }}|g' index.html bingo.html screen.html
 
-      - name: Deploy
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: .
