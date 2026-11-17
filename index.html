@@ -32,9 +32,10 @@
       font-size: 0.95rem; 
       font-weight: bold; 
     }
-    /* 名前の視認性を高めたボタンスタイル */
+    /* 名前の視認性を最優先にしたボタンスタイル（文字色を確実に濃く指定） */
     .name-btn { 
       width: 100%; 
+      display: flex;
       text-align: left; 
       justify-content: space-between; 
       align-items: center;
@@ -42,16 +43,29 @@
       padding: 16px 18px; 
       white-space: normal; 
       font-size: 1.15rem;
-      border: 1px solid #dbdbdb;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+      background-color: #ffffff !important;
+      color: #222222 !important;
+      border: 1px solid #cccccc !important;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.04);
     }
-    .name-btn:hover {
-      background-color: #f9f9f9;
-      border-color: #b5b5b5;
+    .name-btn:hover, .name-btn:focus {
+      background-color: #f0f4f8 !important;
+      border-color: #3e8ed0 !important;
+      color: #000000 !important;
+    }
+    .participant-name-text {
+      color: #111111 !important;
+      font-weight: 700;
+      font-size: 1.15rem;
+    }
+    .participant-name-attended {
+      color: #777777 !important;
+      font-weight: 700;
+      font-size: 1.15rem;
     }
     .dept-label {
       font-size: 0.8rem;
-      color: #666;
+      color: #555555 !important;
       display: block;
       margin-bottom: 2px;
     }
@@ -305,15 +319,17 @@
 
       filtered.forEach(p => {
         const btn = document.createElement('button');
-        btn.className = 'button is-white name-btn mb-2';
+        btn.type = 'button';
+        btn.className = 'button name-btn mb-2';
         
+        const displayName = (p.name || '（氏名未登録）').trim();
         const deptName = (p.department || '').trim();
         const deptHtml = (selectedDept === 'ALL' && deptName) ? `<span class="dept-label">${deptName}</span>` : '';
 
         if (p.isAttended && p.seat) {
-          btn.innerHTML = `<div>${deptHtml}<strong class="has-text-grey">${p.name}</strong></div><span class="tag is-warning is-light">受付済 (${p.seat})</span>`;
+          btn.innerHTML = `<div>${deptHtml}<span class="participant-name-attended">${displayName}</span></div><span class="tag is-warning is-light">受付済 (${p.seat})</span>`;
         } else {
-          btn.innerHTML = `<div>${deptHtml}<strong class="has-text-dark">${p.name}</strong></div><span class="tag is-info is-light">未受付</span>`;
+          btn.innerHTML = `<div>${deptHtml}<span class="participant-name-text">${displayName}</span></div><span class="tag is-info is-light">未受付</span>`;
         }
 
         btn.onclick = () => selectParticipant(p.id);
