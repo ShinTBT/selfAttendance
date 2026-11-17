@@ -9,11 +9,22 @@
   <style>
     body { background-color: #0b0f19; color: #fff; min-height: 100vh; padding: 20px; font-family: sans-serif; }
     .main-number {
-      font-size: 10rem;
+      font-size: 9rem;
       font-weight: 900;
       color: #ffd12a;
       text-shadow: 0 0 30px rgba(255, 209, 42, 0.6);
       line-height: 1;
+    }
+    .stats-box {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 15px 25px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    .stat-value {
+      font-size: 3rem;
+      font-weight: 900;
+      line-height: 1.1;
     }
     .history-grid {
       display: grid;
@@ -42,26 +53,49 @@
 </head>
 <body>
   <div class="container has-text-centered">
-    <h1 class="title is-3 has-text-warning">🎉 忘年会 大ビンゴ大会 🎉</h1>
+    <h1 class="title is-3 has-text-warning mb-4">🎉 忘年会 大ビンゴ大会 🎉</h1>
 
-    <!-- 抽選メイン表示エリア -->
-    <div class="my-5">
-      <div id="display-number" class="main-number">?</div>
+    <div class="columns is-vcentered is-centered my-3">
+      <!-- 抽選メイン数字 -->
+      <div class="column is-5">
+        <div id="display-number" class="main-number">?</div>
+      </div>
+
+      <!-- 💡 リーチ・ビンゴ人数カウンター -->
+      <div class="column is-6">
+        <div class="columns is-mobile">
+          <div class="column">
+            <div class="stats-box">
+              <p class="is-size-5 has-text-warning has-text-weight-bold mb-1">🔥 リーチ</p>
+              <p class="stat-value has-text-warning"><span id="reach-count">0</span><span class="is-size-5 ml-1">名</span></p>
+            </div>
+          </div>
+          <div class="column">
+            <div class="stats-box" style="border-color: rgba(241, 70, 104, 0.5);">
+              <p class="is-size-5 has-text-danger has-text-weight-bold mb-1">🎉 ビンゴ</p>
+              <p class="stat-value has-text-danger"><span id="bingo-count">0</span><span class="is-size-5 ml-1">名</span></p>
+            </div>
+          </div>
+        </div>
+        <!-- ビンゴ達成者名の表示バー -->
+        <div id="winners-area" class="mt-2 p-2" style="display: none; background: rgba(241, 70, 104, 0.2); border-radius: 8px;">
+          <p class="is-size-6 has-text-weight-bold has-text-white">🏆 ビンゴ達成者: <span id="winners-list" class="has-text-warning"></span></p>
+        </div>
+      </div>
     </div>
 
-    <button id="draw-btn" onclick="startDraw()" class="button is-danger is-large is-rounded px-6 my-4" style="font-size: 1.8rem; font-weight: bold;">
+    <button id="draw-btn" onclick="startDraw()" class="button is-danger is-large is-rounded px-6 my-3" style="font-size: 1.8rem; font-weight: bold;">
       🎰 数字を引く！
     </button>
 
     <!-- 1~75の全履歴ボード -->
-    <div class="mt-6">
+    <div class="mt-5">
       <p class="subtitle is-6 has-text-grey-light mb-2">【 当選番号一覧 】</p>
       <div class="history-grid" id="history-board"></div>
     </div>
   </div>
 
   <script>
-    // 💡 GitHub Actionsビルド時に Secrets の値に自動展開されます
     const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxlDFQLyMiWDSezU3Kx3kO9jX6FrnV5jpbIh3pgfNeN5a0wcb1_JvxgVO6QnsSb-X9kBA/exec';
     let drawnHistory = [];
 
@@ -77,15 +111,19 @@
       }
     }
 
-    // 初回ロード時に既に引かれている数字を取得して反映
     async function loadInitialHistory() {
       try {
         const res = await fetch(`${GAS_API_URL}?action=getDrawHistory`);
         const data = await res.json();
-        if (data.status === 'success' && Array.isArray(data.history)) {
-          updateHistory(data.history);
-          if (data.history.length > 0) {
-            document.getElementById('display-number').innerText = data.history[data.history.length - 1];
+        if (data.status === 'success') {
+          if (Array.isArray(data.history)) {
+            updateHistory(data.history);
+            if (data.history.length > 0) {
+              document.getElementById('display-number').innerText = data.history[data.history.length - 1];
+            }
+          }
+          if (data.stats) {
+            updateStats(data.stats);
           }
         }
       } catch (e) {
@@ -98,11 +136,9 @@
       const display = document.getElementById('display-number');
       btn.disabled = true;
 
-      // ドラムロール演出 (1.5秒間高速で数字をシャッフル)
-      let count = 0;
+      // ドラムロール演出 (1.5秒間)
       const timer = setInterval(() => {
         display.innerText = Math.floor(Math.random() * 75) + 1;
-        count++;
       }, 50);
 
       try {
@@ -114,6 +150,9 @@
           if (data.status === 'success') {
             display.innerText = data.newNumber;
             updateHistory(data.history);
+            if (data.stats) {
+              updateStats(data.stats);
+            }
           } else {
             alert(data.message || "エラーが発生しました");
           }
@@ -138,6 +177,22 @@
             el.classList.remove('active');
           }
         }
+      }
+    }
+
+    // 💡 リーチ・ビンゴ人数の表示更新
+    function updateStats(stats) {
+      document.getElementById('reach-count').innerText = stats.reachCount ?? 0;
+      document.getElementById('bingo-count').innerText = stats.bingoCount ?? 0;
+
+      const winnersArea = document.getElementById('winners-area');
+      const winnersList = document.getElementById('winners-list');
+
+      if (stats.bingoWinners && stats.bingoWinners.length > 0) {
+        winnersArea.style.display = 'block';
+        winnersList.innerText = stats.bingoWinners.join(' 様、 ') + ' 様';
+      } else {
+        winnersArea.style.display = 'none';
       }
     }
 
