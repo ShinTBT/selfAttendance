@@ -32,13 +32,28 @@
       font-size: 0.95rem; 
       font-weight: bold; 
     }
+    /* 名前の視認性を高めたボタンスタイル */
     .name-btn { 
       width: 100%; 
       text-align: left; 
       justify-content: space-between; 
+      align-items: center;
       height: auto; 
-      padding: 14px 16px; 
+      padding: 16px 18px; 
       white-space: normal; 
+      font-size: 1.1rem;
+      border: 1px solid #dbdbdb;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+    }
+    .name-btn:hover {
+      background-color: #f9f9f9;
+      border-color: #b5b5b5;
+    }
+    .dept-label {
+      font-size: 0.8rem;
+      color: #666;
+      display: block;
+      margin-bottom: 2px;
     }
     #reader {
       width: 100%;
@@ -80,7 +95,7 @@
 
     <!-- 1. メイン受付カード -->
     <div id="main-card" class="card p-5">
-      <h1 class="title has-text-centered is-4 mb-2">🎉 忘年会 セルフ受付</h1>
+      <h1 class="title has-text-centered is-4 mb-3">🎉 忘年会 セルフ受付</h1>
       
       <!-- 読み込み中表示 -->
       <div id="loading-msg" class="notification is-info is-light has-text-centered">
@@ -96,22 +111,24 @@
         <div id="reader"></div>
       </div>
 
-      <!-- B. 直接アクセス用：部署・名前リスト選択エリア -->
+      <!-- B. 直接アクセス用：名前一覧（常時表示）＆部署絞り込みエリア -->
       <div id="manual-area" style="display: none;">
-        <p class="has-text-centered has-text-grey is-size-7 mb-4">部署を選択後、お名前をタップしてください</p>
+        <p class="has-text-centered has-text-grey is-size-7 mb-3">お名前をタップして受付を行ってください</p>
         
+        <!-- 部署フィルター（初期状態は「すべての部署」） -->
         <div class="field mb-4">
-          <label class="label is-small">① 部署を選択してください</label>
+          <label class="label is-small has-text-grey">部署で絞り込む（任意）</label>
           <div class="control">
-            <div class="select is-fullwidth is-medium">
+            <div class="select is-fullwidth">
               <select id="dept-select" onchange="filterNamesByDepartment()">
               </select>
             </div>
           </div>
         </div>
 
-        <div id="name-area" class="field mt-5" style="display: none;">
-          <label class="label is-small">② お名前をタップしてください</label>
+        <!-- 名前リスト（最初から常時表示） -->
+        <div id="name-area" class="field mt-4">
+          <label class="label is-small">参加者一覧（<span id="visible-count">0</span>名）</label>
           <div id="name-list" class="buttons">
           </div>
         </div>
@@ -162,7 +179,6 @@
   </div>
 
   <script>
-    // 💡 GitHub Actionsビルド時に Secrets の値に自動展開されます
     const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxlDFQLyMiWDSezU3Kx3kO9jX6FrnV5jpbIh3pgfNeN5a0wcb1_JvxgVO6QnsSb-X9kBA/exec';
 
     let cachedParticipants = [];
@@ -249,29 +265,33 @@
         new Set(cachedParticipants.map(p => (p.department || 'その他').trim()))
       );
 
-      deptSelect.innerHTML = '<option value="" disabled selected>-- 部署を選択してください --</option>';
+      // 初期選択肢を「ALL（すべての部署）」にして全件表示
+      deptSelect.innerHTML = '<option value="ALL" selected>📋 すべての部署を表示</option>';
       departments.forEach(dept => {
         const opt = document.createElement('option');
         opt.value = dept;
         opt.innerText = dept;
         deptSelect.appendChild(opt);
       });
+
+      // 最初から全員分のリストを描画
+      filterNamesByDepartment();
     }
 
     function filterNamesByDepartment() {
       const selectedDept = document.getElementById('dept-select').value;
-      const nameArea = document.getElementById('name-area');
       const nameList = document.getElementById('name-list');
+      const visibleCount = document.getElementById('visible-count');
       
-      if (!selectedDept) return;
-
-      nameArea.style.display = 'block';
       nameList.innerHTML = '';
 
       const filtered = cachedParticipants.filter(p => {
+        if (selectedDept === 'ALL') return true;
         const pDept = (p.department || 'その他').trim();
         return pDept === selectedDept;
       });
+
+      visibleCount.innerText = filtered.length;
 
       if (filtered.length === 0) {
         nameList.innerHTML = '<p class="has-text-grey is-size-7 p-2">該当する参加者がいません</p>';
@@ -280,13 +300,15 @@
 
       filtered.forEach(p => {
         const btn = document.createElement('button');
-        btn.className = 'button is-white is-outlined name-btn mb-2';
-        btn.style.border = '1px solid #dbdbdb';
+        btn.className = 'button is-white name-btn mb-2';
         
+        const deptName = (p.department || '').trim();
+        const deptHtml = deptName ? `<span class="dept-label">${deptName}</span>` : '';
+
         if (p.isAttended && p.seat) {
-          btn.innerHTML = `<span><strong>${p.name}</strong></span><span class="tag is-warning is-light">受付済</span>`;
+          btn.innerHTML = `<div>${deptHtml}<strong class="has-text-grey">${p.name}</strong></div><span class="tag is-warning is-light">受付済 (${p.seat})</span>`;
         } else {
-          btn.innerHTML = `<span><strong>${p.name}</strong></span><span class="tag is-info is-light">未受付</span>`;
+          btn.innerHTML = `<div>${deptHtml}<strong class="has-text-dark">${p.name}</strong></div><span class="tag is-info is-light">未受付</span>`;
         }
 
         btn.onclick = () => selectParticipant(p.id);
@@ -322,7 +344,10 @@
         const resSeat = document.getElementById('res-seat');
 
         if (res && res.status === 'success') {
-          if (res.seat) resSeat.innerText = res.seat;
+          if (res.seat) {
+            resSeat.innerText = res.seat;
+            currentUser.seat = res.seat;
+          }
 
           if (res.isAlreadyAttended) {
             syncStatus.className = "status-badge has-text-warning-dark";
@@ -359,8 +384,8 @@
       document.getElementById('result-card').style.display = 'none';
       document.getElementById('main-card').style.display = 'block';
       
-      document.getElementById('dept-select').selectedIndex = 0;
-      document.getElementById('name-area').style.display = 'none';
+      // 一覧の受付済みバッジ状態を最新に更新して再描画
+      filterNamesByDepartment();
     }
 
     function showError(msg) {
